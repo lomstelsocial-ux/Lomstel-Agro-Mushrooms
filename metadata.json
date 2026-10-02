@@ -1,0 +1,6 @@
+{
+  "name": "Lomstel Agro - Premium Oyster Mushrooms Nigeria",
+  "description": "Cultivating, processing, and supplying premium fresh and dried oyster mushrooms in Nigeria. NAFDAC Reg. No: A8-121508L.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
