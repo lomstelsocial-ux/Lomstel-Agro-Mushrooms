@@ -49,27 +49,131 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Helper to test connectivity
-export async function testSupabaseConnection(): Promise<{ success: boolean; message: string }> {
+// In-memory cache for 0ms ultra-fast access without race conditions
+const memoryCache: Record<string, any> = {};
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+  readOk: boolean;
+  writeOk: boolean;
+  storageOk: boolean;
+  rlsBlocked: boolean;
+  durationMs: number;
+}
+
+// Comprehensive diagnostic to test Read, Write, and Storage Bucket
+export async function testSupabaseConnection(): Promise<ConnectionTestResult> {
   if (!supabase) {
-    return { success: false, message: 'Supabase client not initialized' };
+    return { 
+      success: false, 
+      message: 'Supabase client not initialized (missing URL or anon key).',
+      readOk: false,
+      writeOk: false,
+      storageOk: false,
+      rlsBlocked: false,
+      durationMs: 0
+    };
   }
+
+  const start = performance.now();
+  let readOk = false;
+  let writeOk = false;
+  let storageOk = false;
+  let rlsBlocked = false;
+
   try {
-    const start = performance.now();
-    const { error } = await supabase.from('site_settings').select('id').limit(1);
-    const duration = Math.round(performance.now() - start);
-    if (error) {
-      if (error.code === '42P01' || error.message.includes('relation') || error.message.includes('does not exist')) {
-        return { 
-          success: true, 
-          message: `Connected to Supabase (${duration}ms). Ready to run SQL schema in Supabase SQL editor.` 
-        };
-      }
-      return { success: false, message: `Supabase responded with: ${error.message}` };
+    // 1. Test Read Connectivity
+    const { error: readErr } = await supabase.from('site_settings').select('id').limit(1);
+    if (!readErr) {
+      readOk = true;
+    } else if (readErr.code === '42P01' || readErr.message.includes('does not exist')) {
+      return {
+        success: false,
+        message: 'Connected to Supabase endpoint, but tables have not been created yet. Please execute the SQL schema script in your Supabase SQL Editor.',
+        readOk: false,
+        writeOk: false,
+        storageOk: false,
+        rlsBlocked: false,
+        durationMs: Math.round(performance.now() - start)
+      };
     }
-    return { success: true, message: `Connected to Supabase PostgreSQL successfully (${duration}ms ping)!` };
+
+    // 2. Test Write (RLS Permission)
+    const { error: writeErr } = await supabase.from('site_settings').upsert([{
+      id: 'default_settings',
+      brand_name: 'Lomstel Agro'
+    }]);
+
+    if (!writeErr) {
+      writeOk = true;
+    } else if (writeErr.code === '42501' || writeErr.message.includes('row-level security')) {
+      rlsBlocked = true;
+    }
+
+    // 3. Test Storage Bucket 'lomstel-media'
+    const { data: bucketData, error: bucketErr } = await supabase.storage.getBucket('lomstel-media');
+    if (!bucketErr && bucketData) {
+      storageOk = true;
+    }
+
+    const durationMs = Math.round(performance.now() - start);
+
+    if (writeOk && storageOk) {
+      return {
+        success: true,
+        message: `Fully operational! Connected to Supabase (${durationMs}ms ping) with full database write and media storage permissions.`,
+        readOk: true,
+        writeOk: true,
+        storageOk: true,
+        rlsBlocked: false,
+        durationMs
+      };
+    }
+
+    if (writeOk && !storageOk) {
+      return {
+        success: true,
+        message: `Connected & Database Write Active (${durationMs}ms)! Note: 'lomstel-media' storage bucket is not created yet (images will be saved in database table). Run the storage SQL script to enable the media bucket.`,
+        readOk: true,
+        writeOk: true,
+        storageOk: false,
+        rlsBlocked: false,
+        durationMs
+      };
+    }
+
+    if (rlsBlocked) {
+      return {
+        success: false,
+        message: `Connected (${durationMs}ms), but Row-Level Security (RLS error 42501) is blocking writes! Copy the SQL script below and run it in your Supabase SQL Editor to allow writes.`,
+        readOk: true,
+        writeOk: false,
+        storageOk,
+        rlsBlocked: true,
+        durationMs
+      };
+    }
+
+    return {
+      success: false,
+      message: `Database connection test completed with issues. Read: ${readOk ? 'OK' : 'Failed'}, Write: ${writeOk ? 'OK' : 'Failed'}`,
+      readOk,
+      writeOk,
+      storageOk,
+      rlsBlocked,
+      durationMs
+    };
   } catch (err: any) {
-    return { success: false, message: err?.message || 'Connection failed' };
+    return {
+      success: false,
+      message: err?.message || 'Connection failed unexpectedly',
+      readOk: false,
+      writeOk: false,
+      storageOk: false,
+      rlsBlocked: false,
+      durationMs: Math.round(performance.now() - start)
+    };
   }
 }
 
@@ -86,30 +190,43 @@ const STORAGE_KEYS = {
   VISITOR_ID: 'lomstel_visitor_id',
 };
 
-// Synchronous local helper with safe quota handling
+// Synchronous local helper with in-memory caching and safe quota handling
 function getStoredItem<T>(key: string, defaultVal: T): T {
+  if (memoryCache[key] !== undefined) {
+    return memoryCache[key];
+  }
   try {
     const val = localStorage.getItem(key);
-    return val ? JSON.parse(val) : defaultVal;
-  } catch {
-    return defaultVal;
-  }
+    if (val) {
+      const parsed = JSON.parse(val);
+      memoryCache[key] = parsed;
+      return parsed;
+    }
+  } catch {}
+  return defaultVal;
 }
 
-function setStoredItem<T>(key: string, val: T): void {
-  // 1. Always store to IndexedDB asynchronously (handles large images seamlessly)
-  idbSet(key, val);
+async function setStoredItem<T>(key: string, val: T): Promise<void> {
+  // 1. Instantly update in-memory cache for 0ms synchronous reads (immune to race conditions)
+  memoryCache[key] = val;
 
-  // 2. Also try localStorage (guard against QuotaExceededError)
+  // 2. Persist to IndexedDB (unlimited capacity for high-res base64 images)
+  try {
+    await idbSet(key, val);
+  } catch (err) {
+    console.warn('idbSet write error:', err);
+  }
+
+  // 3. Also try localStorage (guard against QuotaExceededError)
   try {
     localStorage.setItem(key, JSON.stringify(val));
   } catch {
-    console.info('localStorage quota reached, saved safely to IndexedDB');
+    // Harmless quota overflow, IndexedDB and memoryCache have it safe
   }
 
-  // 3. Dispatch reactive event
+  // 4. Dispatch reactive event with detailed payload
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('lomstel_data_change', { detail: { key } }));
+    window.dispatchEvent(new CustomEvent('lomstel_data_change', { detail: { key, val } }));
   }
 }
 
@@ -196,18 +313,40 @@ function mapSiteSettingsToDb(settings: SiteSettings): Record<string, any> {
 export const DataService = {
   // Site Settings
   async getSettings(): Promise<SiteSettings> {
-    // 1. Check local persistent store first (IndexedDB then localStorage)
+    // 1. Check in-memory cache first (instant 0ms response)
+    if (memoryCache[STORAGE_KEYS.SETTINGS]) {
+      return memoryCache[STORAGE_KEYS.SETTINGS];
+    }
+
+    // 2. Check local persistent store (IndexedDB then localStorage)
     const localIdb = await idbGet<SiteSettings | null>(STORAGE_KEYS.SETTINGS, null);
     const localStore = localIdb || getStoredItem<SiteSettings>(STORAGE_KEYS.SETTINGS, INITIAL_SITE_SETTINGS);
+    memoryCache[STORAGE_KEYS.SETTINGS] = localStore;
 
-    // 2. If Supabase is connected, attempt to fetch latest remote row
+    // 3. If Supabase is connected, attempt to fetch latest remote row
     if (supabase) {
       try {
         const { data, error } = await supabase.from('site_settings').select('*').limit(1);
         if (!error && data && data.length > 0 && data[0]) {
           const remoteSettings = mapDbToSiteSettings(data[0]);
-          setStoredItem(STORAGE_KEYS.SETTINGS, remoteSettings);
-          return remoteSettings;
+          // Smart merge: retain local uploaded images if remote row doesn't have them
+          const merged: SiteSettings = {
+            ...localStore,
+            ...remoteSettings,
+            heroImage: remoteSettings.heroImage || localStore.heroImage,
+            heroDriedImage: remoteSettings.heroDriedImage || localStore.heroDriedImage,
+            aboutImage: remoteSettings.aboutImage || localStore.aboutImage,
+            facilityImage: remoteSettings.facilityImage || localStore.facilityImage,
+            scrollingImages: (remoteSettings.scrollingImages && remoteSettings.scrollingImages.length > 0)
+              ? remoteSettings.scrollingImages
+              : localStore.scrollingImages,
+            videos: (remoteSettings.videos && remoteSettings.videos.length > 0)
+              ? remoteSettings.videos
+              : localStore.videos,
+          };
+          memoryCache[STORAGE_KEYS.SETTINGS] = merged;
+          await setStoredItem(STORAGE_KEYS.SETTINGS, merged);
+          return merged;
         }
       } catch (err) {
         console.warn('Supabase getSettings fallback to local store:', err);
@@ -229,9 +368,12 @@ export const DataService = {
     return localStore;
   },
 
-  async updateSettings(settings: SiteSettings): Promise<SiteSettings> {
-    // 1. Immediately persist locally (indestructible local storage)
-    setStoredItem(STORAGE_KEYS.SETTINGS, settings);
+  async updateSettings(settings: SiteSettings): Promise<{ settings: SiteSettings; dbSynced: boolean; error?: string }> {
+    // 1. Immediately persist locally (memoryCache + IndexedDB + localStorage)
+    await setStoredItem(STORAGE_KEYS.SETTINGS, settings);
+
+    let dbSynced = false;
+    let syncError: string | undefined;
 
     // 2. Asynchronously sync to Supabase PostgreSQL
     if (supabase) {
@@ -239,22 +381,30 @@ export const DataService = {
         const dbPayload = mapSiteSettingsToDb(settings);
         const { error } = await supabase.from('site_settings').upsert([dbPayload]);
         if (error) {
+          syncError = error.message;
           console.warn('Supabase settings sync error (saved locally):', error.message);
+        } else {
+          dbSynced = true;
         }
-      } catch (err) {
+      } catch (err: any) {
+        syncError = err?.message || 'Network error';
         console.warn('Supabase updateSettings network error (saved locally):', err);
       }
     }
 
-    return settings;
+    return { settings, dbSynced, error: syncError };
   },
 
   // Products
   async getProducts(): Promise<Product[]> {
+    if (memoryCache[STORAGE_KEYS.PRODUCTS]) {
+      return memoryCache[STORAGE_KEYS.PRODUCTS];
+    }
     const localIdb = await idbGet<Product[] | null>(STORAGE_KEYS.PRODUCTS, null);
     const localStore = (localIdb && localIdb.length > 0) 
       ? localIdb 
       : getStoredItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    memoryCache[STORAGE_KEYS.PRODUCTS] = localStore;
 
     if (supabase) {
       try {
@@ -275,7 +425,8 @@ export const DataService = {
             inStock: item.in_stock !== undefined ? Boolean(item.in_stock) : (item.inStock ?? true),
             whatsappMessage: item.whatsapp_message ?? item.whatsappMessage ?? ''
           }));
-          setStoredItem(STORAGE_KEYS.PRODUCTS, mapped);
+          memoryCache[STORAGE_KEYS.PRODUCTS] = mapped;
+          await setStoredItem(STORAGE_KEYS.PRODUCTS, mapped);
           return mapped;
         }
       } catch (err) {
@@ -285,7 +436,7 @@ export const DataService = {
     return localStore;
   },
 
-  async saveProduct(product: Product): Promise<Product> {
+  async saveProduct(product: Product): Promise<{ product: Product; dbSynced: boolean }> {
     const current = await this.getProducts();
     const index = current.findIndex(p => p.id === product.id);
     let updated: Product[];
@@ -296,8 +447,9 @@ export const DataService = {
       updated = [product, ...current];
     }
 
-    setStoredItem(STORAGE_KEYS.PRODUCTS, updated);
+    await setStoredItem(STORAGE_KEYS.PRODUCTS, updated);
 
+    let dbSynced = false;
     if (supabase) {
       try {
         const dbProduct = {
@@ -317,18 +469,19 @@ export const DataService = {
           created_at: new Date().toISOString()
         };
         const { error } = await supabase.from('products').upsert([dbProduct]);
+        if (!error) dbSynced = true;
         if (error) console.warn('Supabase saveProduct error (saved locally):', error.message);
       } catch (err) {
         console.warn('Supabase saveProduct error:', err);
       }
     }
-    return product;
+    return { product, dbSynced };
   },
 
   async deleteProduct(id: string): Promise<void> {
     const current = await this.getProducts();
     const updated = current.filter(p => p.id !== id);
-    setStoredItem(STORAGE_KEYS.PRODUCTS, updated);
+    await setStoredItem(STORAGE_KEYS.PRODUCTS, updated);
 
     if (supabase) {
       try {
@@ -341,10 +494,14 @@ export const DataService = {
 
   // Gallery
   async getGallery(): Promise<GalleryItem[]> {
+    if (memoryCache[STORAGE_KEYS.GALLERY]) {
+      return memoryCache[STORAGE_KEYS.GALLERY];
+    }
     const localIdb = await idbGet<GalleryItem[] | null>(STORAGE_KEYS.GALLERY, null);
     const localStore = (localIdb && localIdb.length > 0)
       ? localIdb
       : getStoredItem<GalleryItem[]>(STORAGE_KEYS.GALLERY, INITIAL_GALLERY);
+    memoryCache[STORAGE_KEYS.GALLERY] = localStore;
 
     if (supabase) {
       try {
@@ -357,7 +514,8 @@ export const DataService = {
             imageUrl: item.image_url ?? item.imageUrl ?? '',
             caption: item.caption ?? ''
           }));
-          setStoredItem(STORAGE_KEYS.GALLERY, mapped);
+          memoryCache[STORAGE_KEYS.GALLERY] = mapped;
+          await setStoredItem(STORAGE_KEYS.GALLERY, mapped);
           return mapped;
         }
       } catch (err) {
@@ -367,7 +525,7 @@ export const DataService = {
     return localStore;
   },
 
-  async saveGalleryItem(item: GalleryItem): Promise<GalleryItem> {
+  async saveGalleryItem(item: GalleryItem): Promise<{ item: GalleryItem; dbSynced: boolean }> {
     const current = await this.getGallery();
     const index = current.findIndex(g => g.id === item.id);
     let updated: GalleryItem[];
@@ -378,8 +536,9 @@ export const DataService = {
       updated = [item, ...current];
     }
 
-    setStoredItem(STORAGE_KEYS.GALLERY, updated);
+    await setStoredItem(STORAGE_KEYS.GALLERY, updated);
 
+    let dbSynced = false;
     if (supabase) {
       try {
         const dbItem = {
@@ -391,18 +550,19 @@ export const DataService = {
           created_at: new Date().toISOString()
         };
         const { error } = await supabase.from('gallery').upsert([dbItem]);
+        if (!error) dbSynced = true;
         if (error) console.warn('Supabase saveGalleryItem error (saved locally):', error.message);
       } catch (err) {
         console.warn('Supabase saveGalleryItem error:', err);
       }
     }
-    return item;
+    return { item, dbSynced };
   },
 
   async deleteGalleryItem(id: string): Promise<void> {
     const current = await this.getGallery();
     const updated = current.filter(g => g.id !== id);
-    setStoredItem(STORAGE_KEYS.GALLERY, updated);
+    await setStoredItem(STORAGE_KEYS.GALLERY, updated);
 
     if (supabase) {
       try {

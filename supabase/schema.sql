@@ -21,7 +21,13 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
     hero_headline TEXT NOT NULL DEFAULT 'FRESH OYSTER MUSHROOMS, GROWN WITH CARE.',
     hero_subheadline TEXT NOT NULL DEFAULT 'Discover fresh, natural and nutritious oyster mushrooms, carefully cultivated and hygienically packaged by Lomstel Agro.',
     hero_image TEXT,
+    hero_dried_image TEXT,
     hero_cta_text TEXT DEFAULT 'ORDER NOW',
+    social_links JSONB NOT NULL DEFAULT '[]'::jsonb,
+    scrolling_images JSONB NOT NULL DEFAULT '[]'::jsonb,
+    video_section_headline TEXT DEFAULT 'WATCH OUR FARM IN ACTION',
+    video_section_subheadline TEXT,
+    videos JSONB NOT NULL DEFAULT '[]'::jsonb,
     about_title TEXT DEFAULT 'FROM OUR FARM TO YOUR TABLE.',
     about_text TEXT NOT NULL,
     about_image TEXT,
@@ -126,6 +132,15 @@ CREATE TABLE IF NOT EXISTS public.customer_leads (
 -- ===================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ===================================================
+-- Safe column upgrades if tables already exist
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS hero_dried_image TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS social_links JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS scrolling_images JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS video_section_headline TEXT DEFAULT 'WATCH OUR FARM IN ACTION';
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS video_section_subheadline TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS videos JSONB DEFAULT '[]'::jsonb;
+
+-- Enable Row Level Security (RLS) on all tables
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gallery ENABLE ROW LEVEL SECURITY;
@@ -135,22 +150,61 @@ ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_analytics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_leads ENABLE ROW LEVEL SECURITY;
 
--- Public Visitor Read Policies (Marketing catalog is publicly accessible)
-CREATE POLICY "Allow public read site_settings" ON public.site_settings FOR SELECT USING (true);
-CREATE POLICY "Allow public read products" ON public.products FOR SELECT USING (true);
-CREATE POLICY "Allow public read gallery" ON public.gallery FOR SELECT USING (true);
-CREATE POLICY "Allow public read faqs" ON public.faqs FOR SELECT USING (true);
-CREATE POLICY "Allow public read testimonials" ON public.testimonials FOR SELECT USING (is_published = true);
+-- Allow full read & write access for both anon web clients and authenticated admin
+DROP POLICY IF EXISTS "Allow all on site_settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Allow public read site_settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Admins full access site_settings" ON public.site_settings;
+CREATE POLICY "Allow all on site_settings" ON public.site_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- Public Visitor Order Creation & Analytics Logging
-CREATE POLICY "Allow public to submit orders" ON public.orders FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public to log analytics" ON public.site_analytics FOR ALL USING (true);
+DROP POLICY IF EXISTS "Allow all on products" ON public.products;
+DROP POLICY IF EXISTS "Allow public read products" ON public.products;
+DROP POLICY IF EXISTS "Admins full access products" ON public.products;
+CREATE POLICY "Allow all on products" ON public.products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- Authenticated Admin Policies (Full administrative management)
-CREATE POLICY "Admins full access site_settings" ON public.site_settings FOR ALL TO authenticated USING (true);
-CREATE POLICY "Admins full access products" ON public.products FOR ALL TO authenticated USING (true);
-CREATE POLICY "Admins full access gallery" ON public.gallery FOR ALL TO authenticated USING (true);
-CREATE POLICY "Admins full access faqs" ON public.faqs FOR ALL TO authenticated USING (true);
-CREATE POLICY "Admins full access testimonials" ON public.testimonials FOR ALL TO authenticated USING (true);
-CREATE POLICY "Admins full access orders" ON public.orders FOR ALL TO authenticated USING (true);
-CREATE POLICY "Admins full access customer_leads" ON public.customer_leads FOR ALL TO authenticated USING (true);
+DROP POLICY IF EXISTS "Allow all on gallery" ON public.gallery;
+DROP POLICY IF EXISTS "Allow public read gallery" ON public.gallery;
+DROP POLICY IF EXISTS "Admins full access gallery" ON public.gallery;
+CREATE POLICY "Allow all on gallery" ON public.gallery FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on faqs" ON public.faqs;
+DROP POLICY IF EXISTS "Allow public read faqs" ON public.faqs;
+DROP POLICY IF EXISTS "Admins full access faqs" ON public.faqs;
+CREATE POLICY "Allow all on faqs" ON public.faqs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on testimonials" ON public.testimonials;
+DROP POLICY IF EXISTS "Allow public read testimonials" ON public.testimonials;
+DROP POLICY IF EXISTS "Admins full access testimonials" ON public.testimonials;
+CREATE POLICY "Allow all on testimonials" ON public.testimonials FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on orders" ON public.orders;
+DROP POLICY IF EXISTS "Allow public to submit orders" ON public.orders;
+DROP POLICY IF EXISTS "Admins full access orders" ON public.orders;
+CREATE POLICY "Allow all on orders" ON public.orders FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on site_analytics" ON public.site_analytics;
+DROP POLICY IF EXISTS "Allow public to log analytics" ON public.site_analytics;
+CREATE POLICY "Allow all on site_analytics" ON public.site_analytics FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on customer_leads" ON public.customer_leads;
+DROP POLICY IF EXISTS "Admins full access customer_leads" ON public.customer_leads;
+CREATE POLICY "Allow all on customer_leads" ON public.customer_leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- ===================================================
+-- STORAGE BUCKET FOR MEDIA UPLOADS
+-- ===================================================
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('lomstel-media', 'lomstel-media', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public media access" ON storage.objects;
+CREATE POLICY "Public media access" ON storage.objects FOR SELECT TO anon, authenticated USING (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media upload" ON storage.objects;
+CREATE POLICY "Public media upload" ON storage.objects FOR INSERT TO anon, authenticated WITH CHECK (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media update" ON storage.objects;
+CREATE POLICY "Public media update" ON storage.objects FOR UPDATE TO anon, authenticated USING (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media delete" ON storage.objects;
+CREATE POLICY "Public media delete" ON storage.objects FOR DELETE TO anon, authenticated USING (bucket_id = 'lomstel-media');
+

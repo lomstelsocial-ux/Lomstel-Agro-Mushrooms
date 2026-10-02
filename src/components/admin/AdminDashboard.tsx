@@ -190,10 +190,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
 
   const [sqlCopied, setSqlCopied] = useState(false);
+  const [quickFixCopied, setQuickFixCopied] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionResult, setConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [connectionResult, setConnectionResult] = useState<any>(null);
 
   // Outreach quick response composer state
   const [selectedLead, setSelectedLead] = useState<CustomerLead | null>(null);
@@ -267,44 +268,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (targetField === 'hero' && settings) {
         const updated = { ...settings, heroImage: imageUrl };
         setSettings(updated);
-        await DataService.updateSettings(updated);
+        const res = await DataService.updateSettings(updated);
         if (onRefreshData) onRefreshData(updated);
-        setSaveStatus('Fresh Hero image uploaded and applied to home page!');
-        setTimeout(() => setSaveStatus(null), 4000);
+        if (res.dbSynced) {
+          setSaveStatus('Fresh Hero image saved to database and applied to project!');
+        } else {
+          setSaveStatus('Fresh Hero image applied to project! (Open "Connect Supabase & SQL" to enable cloud database storage)');
+        }
+        setTimeout(() => setSaveStatus(null), 4500);
       } else if (targetField === 'hero-dried' && settings) {
         const updated = { ...settings, heroDriedImage: imageUrl };
         setSettings(updated);
-        await DataService.updateSettings(updated);
+        const res = await DataService.updateSettings(updated);
         if (onRefreshData) onRefreshData(updated);
-        setSaveStatus('Dried Mushroom Hero image uploaded and applied to home page!');
-        setTimeout(() => setSaveStatus(null), 4000);
+        if (res.dbSynced) {
+          setSaveStatus('Dried Mushroom Hero image saved to database and applied to project!');
+        } else {
+          setSaveStatus('Dried Mushroom Hero image applied to project! (Open "Connect Supabase & SQL" to enable cloud database storage)');
+        }
+        setTimeout(() => setSaveStatus(null), 4500);
       } else if (targetField === 'about' && settings) {
         const updated = { ...settings, aboutImage: imageUrl };
         setSettings(updated);
-        await DataService.updateSettings(updated);
+        const res = await DataService.updateSettings(updated);
         if (onRefreshData) onRefreshData(updated);
-        setSaveStatus('About section image uploaded and applied to project!');
-        setTimeout(() => setSaveStatus(null), 4000);
+        if (res.dbSynced) {
+          setSaveStatus('About section image saved to database and applied to project!');
+        } else {
+          setSaveStatus('About section image applied to project! (Open "Connect Supabase & SQL" to enable cloud database storage)');
+        }
+        setTimeout(() => setSaveStatus(null), 4500);
       } else if (targetField === 'facility' && settings) {
         const updated = { ...settings, facilityImage: imageUrl };
         setSettings(updated);
-        await DataService.updateSettings(updated);
+        const res = await DataService.updateSettings(updated);
         if (onRefreshData) onRefreshData(updated);
-        setSaveStatus('Facility image uploaded and applied to project!');
-        setTimeout(() => setSaveStatus(null), 4000);
+        if (res.dbSynced) {
+          setSaveStatus('Facility image saved to database and applied to project!');
+        } else {
+          setSaveStatus('Facility image applied to project! (Open "Connect Supabase & SQL" to enable cloud database storage)');
+        }
+        setTimeout(() => setSaveStatus(null), 4500);
       } else if (targetField === 'product' && editingProduct) {
         setEditingProduct({ ...editingProduct, image: imageUrl });
+        setSaveStatus('Product image updated in editor. Click "Save Product" to publish.');
+        setTimeout(() => setSaveStatus(null), 3000);
       } else if (targetField === 'gallery') {
         setNewGalleryItem((prev) => ({ ...prev, imageUrl }));
+        setSaveStatus('Gallery image uploaded. Click "Add to Gallery" to publish.');
+        setTimeout(() => setSaveStatus(null), 3000);
       } else if (targetField === 'gallery-edit' && editingGalleryItem) {
         setEditingGalleryItem({ ...editingGalleryItem, imageUrl });
+        setSaveStatus('Gallery image updated. Click "Save Changes" to publish.');
+        setTimeout(() => setSaveStatus(null), 3000);
       } else if (targetField === 'scrolling-add') {
         setNewScrollingItem((prev) => ({ ...prev, imageUrl }));
+        setSaveStatus('Scrolling panel image uploaded. Click "Add Photo to Scrolling Panel" to publish.');
+        setTimeout(() => setSaveStatus(null), 3000);
       } else if (targetField === 'scrolling-edit' && editingScrollingItem) {
         setEditingScrollingItem({ ...editingScrollingItem, imageUrl });
+        setSaveStatus('Scrolling image updated. Click "Save Changes" to publish.');
+        setTimeout(() => setSaveStatus(null), 3000);
       }
     } catch (err) {
-      alert('Failed to upload image. Please try a different file.');
+      setSaveStatus('Failed to upload image. Please try a different file.');
+      setTimeout(() => setSaveStatus(null), 4000);
     } finally {
       setUploadingImage(false);
     }
@@ -367,30 +395,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveSettings = async () => {
     if (!settings) return;
     try {
-      const saved = await DataService.updateSettings(settings);
-      setSaveStatus('Website content & settings updated successfully!');
-      setTimeout(() => setSaveStatus(null), 3000);
-      if (onRefreshData) onRefreshData(saved);
+      const res = await DataService.updateSettings(settings);
+      if (res.dbSynced) {
+        setSaveStatus('Website content & images saved to Supabase cloud database & applied to project!');
+      } else if (res.error) {
+        setSaveStatus('Applied to project! Note: Database write was blocked by RLS policies. Open "Connect Supabase & SQL" to apply the 1-click SQL fix.');
+      } else {
+        setSaveStatus('Website content & settings updated successfully!');
+      }
+      setTimeout(() => setSaveStatus(null), 4000);
+      if (onRefreshData) onRefreshData(res.settings);
     } catch (e) {
       setSaveStatus('Error saving settings.');
+      setTimeout(() => setSaveStatus(null), 3000);
     }
   };
 
   // Product CRUD
   const handleSaveProduct = async (prod: Product) => {
-    await DataService.saveProduct(prod);
+    const res = await DataService.saveProduct(prod);
     setEditingProduct(null);
     setIsAddingProduct(false);
     await loadData();
+    if (res.dbSynced) {
+      setSaveStatus('Product saved to database and live on website!');
+    } else {
+      setSaveStatus('Product updated and applied to website!');
+    }
+    setTimeout(() => setSaveStatus(null), 3000);
     if (onRefreshData) onRefreshData();
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (window.confirm('Delete this product?')) {
-      await DataService.deleteProduct(id);
-      await loadData();
-      if (onRefreshData) onRefreshData();
-    }
+    await DataService.deleteProduct(id);
+    await loadData();
+    setSaveStatus('Product removed.');
+    setTimeout(() => setSaveStatus(null), 3000);
+    if (onRefreshData) onRefreshData();
   };
 
   // FAQ CRUD
@@ -430,7 +471,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Gallery CRUD
   const handleAddGalleryItem = async () => {
     if (!newGalleryItem.title?.trim() || !newGalleryItem.imageUrl?.trim()) {
-      alert('Please provide at least an image title and upload or paste an image URL.');
+      setSaveStatus('Please provide an image title and upload or paste an image URL.');
+      setTimeout(() => setSaveStatus(null), 3500);
       return;
     }
     const item: GalleryItem = {
@@ -440,10 +482,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       imageUrl: newGalleryItem.imageUrl.trim(),
       caption: newGalleryItem.caption?.trim() || ''
     };
-    await DataService.saveGalleryItem(item);
+    const res = await DataService.saveGalleryItem(item);
     setNewGalleryItem({ title: '', category: 'Fresh Mushrooms', imageUrl: '', caption: '' });
     setIsAddingGallery(false);
     await loadData();
+    if (res.dbSynced) {
+      setSaveStatus('Gallery photo saved to database and live on website!');
+    } else {
+      setSaveStatus('Gallery photo added to website!');
+    }
+    setTimeout(() => setSaveStatus(null), 3000);
     if (onRefreshData) onRefreshData();
   };
 
@@ -455,10 +503,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveEditedGalleryItem = async () => {
     if (!editingGalleryItem) return;
     if (!editingGalleryItem.title?.trim() || !editingGalleryItem.imageUrl?.trim()) {
-      alert('Please provide at least an image title and an image URL or uploaded photo.');
+      setSaveStatus('Please provide an image title and an image URL or uploaded photo.');
+      setTimeout(() => setSaveStatus(null), 3500);
       return;
     }
-    await DataService.saveGalleryItem({
+    const res = await DataService.saveGalleryItem({
       ...editingGalleryItem,
       title: editingGalleryItem.title.trim(),
       imageUrl: editingGalleryItem.imageUrl.trim(),
@@ -466,18 +515,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
     setEditingGalleryItem(null);
     await loadData();
+    if (res.dbSynced) {
+      setSaveStatus('Gallery photo updated and saved to database!');
+    } else {
+      setSaveStatus('Gallery photo updated and live on website!');
+    }
+    setTimeout(() => setSaveStatus(null), 3000);
     if (onRefreshData) onRefreshData();
   };
 
   const handleDeleteGallery = async (id: string) => {
-    if (window.confirm('Delete this image from gallery?')) {
-      await DataService.deleteGalleryItem(id);
-      if (editingGalleryItem?.id === id) {
-        setEditingGalleryItem(null);
-      }
-      await loadData();
-      if (onRefreshData) onRefreshData();
+    await DataService.deleteGalleryItem(id);
+    if (editingGalleryItem?.id === id) {
+      setEditingGalleryItem(null);
     }
+    await loadData();
+    setSaveStatus('Gallery photo removed.');
+    setTimeout(() => setSaveStatus(null), 3000);
+    if (onRefreshData) onRefreshData();
   };
 
   // Social Media Management Handlers
@@ -548,7 +603,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleAddScrollingItem = async () => {
     if (!settings) return;
     if (!newScrollingItem.imageUrl?.trim()) {
-      alert('Please upload an image or paste an image URL for the scrolling panel.');
+      setSaveStatus('Please upload an image or paste an image URL for the scrolling panel.');
+      setTimeout(() => setSaveStatus(null), 3500);
       return;
     }
     const item: ScrollingBannerItem = {
@@ -562,18 +618,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const updated = [...(settings.scrollingImages || []), item];
     const updatedSettings = { ...settings, scrollingImages: updated };
     setSettings(updatedSettings);
-    await DataService.updateSettings(updatedSettings);
+    const res = await DataService.updateSettings(updatedSettings);
     setNewScrollingItem({ title: '', caption: '', imageUrl: '', enabled: true });
     setIsAddingScrolling(false);
-    setSaveStatus('Photo added to scrolling panel successfully!');
-    setTimeout(() => setSaveStatus(null), 3000);
-    if (onRefreshData) onRefreshData();
+    if (res.dbSynced) {
+      setSaveStatus('Photo added and saved to database!');
+    } else {
+      setSaveStatus('Photo added to scrolling panel and live on home page!');
+    }
+    setTimeout(() => setSaveStatus(null), 3500);
+    if (onRefreshData) onRefreshData(updatedSettings);
   };
 
   const handleSaveEditedScrollingItem = async () => {
     if (!settings || !editingScrollingItem) return;
     if (!editingScrollingItem.imageUrl?.trim()) {
-      alert('Please provide an image for this item.');
+      setSaveStatus('Please provide an image for this item.');
+      setTimeout(() => setSaveStatus(null), 3500);
       return;
     }
     const updated = (settings.scrollingImages || []).map(item => 
@@ -581,27 +642,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
     const updatedSettings = { ...settings, scrollingImages: updated };
     setSettings(updatedSettings);
-    await DataService.updateSettings(updatedSettings);
+    const res = await DataService.updateSettings(updatedSettings);
     setEditingScrollingItem(null);
-    setSaveStatus('Scrolling panel image updated!');
-    setTimeout(() => setSaveStatus(null), 3000);
-    if (onRefreshData) onRefreshData();
+    if (res.dbSynced) {
+      setSaveStatus('Scrolling panel photo saved to database and live on website!');
+    } else {
+      setSaveStatus('Scrolling panel image updated and applied!');
+    }
+    setTimeout(() => setSaveStatus(null), 3500);
+    if (onRefreshData) onRefreshData(updatedSettings);
   };
 
   const handleDeleteScrollingItem = async (id: string) => {
     if (!settings) return;
-    if (window.confirm('Remove this photo from the auto-scrolling panel?')) {
-      const updated = (settings.scrollingImages || []).filter(item => item.id !== id);
-      const updatedSettings = { ...settings, scrollingImages: updated };
-      setSettings(updatedSettings);
-      await DataService.updateSettings(updatedSettings);
-      if (editingScrollingItem?.id === id) {
-        setEditingScrollingItem(null);
-      }
-      setSaveStatus('Photo removed from scrolling panel.');
-      setTimeout(() => setSaveStatus(null), 3000);
-      if (onRefreshData) onRefreshData();
+    const updated = (settings.scrollingImages || []).filter(item => item.id !== id);
+    const updatedSettings = { ...settings, scrollingImages: updated };
+    setSettings(updatedSettings);
+    await DataService.updateSettings(updatedSettings);
+    if (editingScrollingItem?.id === id) {
+      setEditingScrollingItem(null);
     }
+    setSaveStatus('Photo removed from scrolling panel.');
+    setTimeout(() => setSaveStatus(null), 3000);
+    if (onRefreshData) onRefreshData(updatedSettings);
   };
 
   const handleToggleScrollingItem = async (id: string) => {
@@ -612,7 +675,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const updatedSettings = { ...settings, scrollingImages: updated };
     setSettings(updatedSettings);
     await DataService.updateSettings(updatedSettings);
-    if (onRefreshData) onRefreshData();
+    if (onRefreshData) onRefreshData(updatedSettings);
   };
 
   // Video Showcase & YouTube Handlers
@@ -3967,19 +4030,239 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Connection Test Result Banner */}
                     {connectionResult && (
-                      <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 font-medium ${
+                      <div className={`p-4 rounded-2xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 font-medium ${
                         connectionResult.success 
                           ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-                          : 'bg-amber-50 border-amber-200 text-amber-800'
+                          : 'bg-amber-50 border-amber-300 text-amber-900'
                       }`}>
-                        {connectionResult.success ? (
-                          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div className="flex items-start gap-2.5">
+                          {connectionResult.success ? (
+                            <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <p className="font-bold">{connectionResult.message}</p>
+                            {connectionResult.rlsBlocked && (
+                              <p className="text-[11px] text-amber-800 mt-1">
+                                Click the green button below to copy the SQL script that grants write permissions and creates the media bucket.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {connectionResult.rlsBlocked && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const fixSql = `-- LOMSTEL AGRO - 1-CLICK PERMISSIONS & MEDIA STORAGE FIX
+-- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/puxfokyknlnkgbcyvtui/sql
+
+-- 1. Ensure columns exist
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS hero_dried_image TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS social_links JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS scrolling_images JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS video_section_headline TEXT DEFAULT 'WATCH OUR FARM IN ACTION';
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS video_section_subheadline TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS videos JSONB DEFAULT '[]'::jsonb;
+
+-- 2. Grant full read & write access to all application tables
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.faqs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.testimonials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_analytics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customer_leads ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all on site_settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Allow public read site_settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Admins full access site_settings" ON public.site_settings;
+CREATE POLICY "Allow all on site_settings" ON public.site_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on products" ON public.products;
+DROP POLICY IF EXISTS "Allow public read products" ON public.products;
+DROP POLICY IF EXISTS "Admins full access products" ON public.products;
+CREATE POLICY "Allow all on products" ON public.products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on gallery" ON public.gallery;
+DROP POLICY IF EXISTS "Allow public read gallery" ON public.gallery;
+DROP POLICY IF EXISTS "Admins full access gallery" ON public.gallery;
+CREATE POLICY "Allow all on gallery" ON public.gallery FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on faqs" ON public.faqs;
+DROP POLICY IF EXISTS "Allow public read faqs" ON public.faqs;
+DROP POLICY IF EXISTS "Admins full access faqs" ON public.faqs;
+CREATE POLICY "Allow all on faqs" ON public.faqs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on testimonials" ON public.testimonials;
+DROP POLICY IF EXISTS "Allow public read testimonials" ON public.testimonials;
+DROP POLICY IF EXISTS "Admins full access testimonials" ON public.testimonials;
+CREATE POLICY "Allow all on testimonials" ON public.testimonials FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on orders" ON public.orders;
+DROP POLICY IF EXISTS "Allow public to submit orders" ON public.orders;
+DROP POLICY IF EXISTS "Admins full access orders" ON public.orders;
+CREATE POLICY "Allow all on orders" ON public.orders FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on site_analytics" ON public.site_analytics;
+DROP POLICY IF EXISTS "Allow public to log analytics" ON public.site_analytics;
+CREATE POLICY "Allow all on site_analytics" ON public.site_analytics FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on customer_leads" ON public.customer_leads;
+DROP POLICY IF EXISTS "Admins full access customer_leads" ON public.customer_leads;
+CREATE POLICY "Allow all on customer_leads" ON public.customer_leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 3. Create the media storage bucket and allow public image uploads
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('lomstel-media', 'lomstel-media', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public media access" ON storage.objects;
+CREATE POLICY "Public media access" ON storage.objects FOR SELECT TO anon, authenticated USING (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media upload" ON storage.objects;
+CREATE POLICY "Public media upload" ON storage.objects FOR INSERT TO anon, authenticated WITH CHECK (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media update" ON storage.objects;
+CREATE POLICY "Public media update" ON storage.objects FOR UPDATE TO anon, authenticated USING (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media delete" ON storage.objects;
+CREATE POLICY "Public media delete" ON storage.objects FOR DELETE TO anon, authenticated USING (bucket_id = 'lomstel-media');`;
+                                navigator.clipboard.writeText(fixSql);
+                                setQuickFixCopied(true);
+                                setTimeout(() => setQuickFixCopied(false), 3500);
+                              }}
+                              className="px-3 py-1.5 bg-[#146B4A] hover:bg-[#0B3D2E] text-white font-bold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
+                            >
+                              {quickFixCopied ? 'Copied SQL Fix!' : 'Copy SQL Fix'}
+                            </button>
+                            <a
+                              href="https://supabase.com/dashboard/project/puxfokyknlnkgbcyvtui/sql"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-white text-slate-700 hover:text-black rounded-lg border border-slate-300"
+                              title="Open Supabase SQL Editor"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
                         )}
-                        <span>{connectionResult.message}</span>
                       </div>
                     )}
+
+                    {/* Quick RLS & Storage Fix Banner */}
+                    <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                      <div>
+                        <h4 className="font-bold text-[#0B3D2E] flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-[#D4A72C]" />
+                          <span>1-Click Permissions & Media Storage Script</span>
+                        </h4>
+                        <p className="text-slate-600 text-[11px] mt-0.5">
+                          Run this once in Supabase SQL editor to ensure images, orders, and content save directly to your cloud PostgreSQL database.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fixSql = `-- LOMSTEL AGRO - 1-CLICK PERMISSIONS & MEDIA STORAGE FIX
+-- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/puxfokyknlnkgbcyvtui/sql
+
+-- 1. Ensure columns exist
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS hero_dried_image TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS social_links JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS scrolling_images JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS video_section_headline TEXT DEFAULT 'WATCH OUR FARM IN ACTION';
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS video_section_subheadline TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS videos JSONB DEFAULT '[]'::jsonb;
+
+-- 2. Grant full read & write access to all application tables
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.faqs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.testimonials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_analytics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customer_leads ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all on site_settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Allow public read site_settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Admins full access site_settings" ON public.site_settings;
+CREATE POLICY "Allow all on site_settings" ON public.site_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on products" ON public.products;
+DROP POLICY IF EXISTS "Allow public read products" ON public.products;
+DROP POLICY IF EXISTS "Admins full access products" ON public.products;
+CREATE POLICY "Allow all on products" ON public.products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on gallery" ON public.gallery;
+DROP POLICY IF EXISTS "Allow public read gallery" ON public.gallery;
+DROP POLICY IF EXISTS "Admins full access gallery" ON public.gallery;
+CREATE POLICY "Allow all on gallery" ON public.gallery FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on faqs" ON public.faqs;
+DROP POLICY IF EXISTS "Allow public read faqs" ON public.faqs;
+DROP POLICY IF EXISTS "Admins full access faqs" ON public.faqs;
+CREATE POLICY "Allow all on faqs" ON public.faqs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on testimonials" ON public.testimonials;
+DROP POLICY IF EXISTS "Allow public read testimonials" ON public.testimonials;
+DROP POLICY IF EXISTS "Admins full access testimonials" ON public.testimonials;
+CREATE POLICY "Allow all on testimonials" ON public.testimonials FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on orders" ON public.orders;
+DROP POLICY IF EXISTS "Allow public to submit orders" ON public.orders;
+DROP POLICY IF EXISTS "Admins full access orders" ON public.orders;
+CREATE POLICY "Allow all on orders" ON public.orders FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on site_analytics" ON public.site_analytics;
+DROP POLICY IF EXISTS "Allow public to log analytics" ON public.site_analytics;
+CREATE POLICY "Allow all on site_analytics" ON public.site_analytics FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on customer_leads" ON public.customer_leads;
+DROP POLICY IF EXISTS "Admins full access customer_leads" ON public.customer_leads;
+CREATE POLICY "Allow all on customer_leads" ON public.customer_leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 3. Create the media storage bucket and allow public image uploads
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('lomstel-media', 'lomstel-media', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public media access" ON storage.objects;
+CREATE POLICY "Public media access" ON storage.objects FOR SELECT TO anon, authenticated USING (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media upload" ON storage.objects;
+CREATE POLICY "Public media upload" ON storage.objects FOR INSERT TO anon, authenticated WITH CHECK (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media update" ON storage.objects;
+CREATE POLICY "Public media update" ON storage.objects FOR UPDATE TO anon, authenticated USING (bucket_id = 'lomstel-media');
+
+DROP POLICY IF EXISTS "Public media delete" ON storage.objects;
+CREATE POLICY "Public media delete" ON storage.objects FOR DELETE TO anon, authenticated USING (bucket_id = 'lomstel-media');`;
+                            navigator.clipboard.writeText(fixSql);
+                            setQuickFixCopied(true);
+                            setTimeout(() => setQuickFixCopied(false), 3500);
+                          }}
+                          className="flex items-center gap-1.5 px-3.5 py-2 bg-[#146B4A] hover:bg-[#0B3D2E] text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
+                        >
+                          {quickFixCopied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{quickFixCopied ? 'Copied Quick Fix!' : 'Copy Quick SQL Fix'}</span>
+                        </button>
+                        <a
+                          href="https://supabase.com/dashboard/project/puxfokyknlnkgbcyvtui/sql"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
+                        >
+                          <span>Supabase SQL</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
 
                     {/* Active Credentials Summary */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">

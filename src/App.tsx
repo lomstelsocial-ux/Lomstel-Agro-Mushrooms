@@ -84,8 +84,25 @@ export default function App() {
     if (updatedSettings) {
       setSettings(updatedSettings);
     }
-    await fetchData();
-  }, [fetchData]);
+    try {
+      const [s, p, g, f, t] = await Promise.all([
+        DataService.getSettings(),
+        DataService.getProducts(),
+        DataService.getGallery(),
+        DataService.getFAQs(),
+        DataService.getTestimonials(),
+      ]);
+      if (!updatedSettings && s) {
+        setSettings(s);
+      }
+      if (p) setProducts(p);
+      if (g) setGallery(g);
+      if (f) setFaqs(f);
+      if (t) setTestimonials(t);
+    } catch (err) {
+      console.error('Failed to reload data:', err);
+    }
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -145,10 +162,14 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
 
     // 4. Data change listener
-    const handleDataChange = () => {
-      fetchData();
+    const handleDataChange = (e: any) => {
+      if (e?.detail?.key === 'lomstel_site_settings' && e?.detail?.val) {
+        setSettings(e.detail.val);
+      } else {
+        fetchData();
+      }
     };
-    window.addEventListener('lomstel_data_change', handleDataChange);
+    window.addEventListener('lomstel_data_change', handleDataChange as EventListener);
 
     return () => {
       window.removeEventListener('hashchange', checkAdminTriggerInUrl);
