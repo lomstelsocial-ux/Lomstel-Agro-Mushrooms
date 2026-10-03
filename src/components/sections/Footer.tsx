@@ -10,6 +10,7 @@ import {
 import { LomstelLogo } from '../common/LomstelLogo';
 import { SocialIcon } from '../common/SocialIcon';
 import { SiteSettings } from '../../types';
+import { INITIAL_SITE_SETTINGS } from '../../constants/initialData';
 import { openWhatsApp, WHATSAPP_MESSAGES, DISPLAY_PHONE, SECONDARY_PHONE } from '../../utils/whatsapp';
 
 interface FooterProps {
@@ -19,14 +20,18 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ settings, onOpenAdmin, onOpenOrderModal }) => {
-  const activeSocialLinks = (settings.socialLinks || []).filter((s) => s.enabled);
+  const allSocialLinks = (settings.socialLinks && settings.socialLinks.length > 0)
+    ? settings.socialLinks
+    : (INITIAL_SITE_SETTINGS.socialLinks || []);
+
+  const activeSocialLinks = allSocialLinks.filter((s) => s.enabled);
 
   return (
     <footer className="bg-[#07271D] text-white pt-16 pb-12 border-t border-[#146B4A]/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Main Footer Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8 pb-14 border-b border-white/10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8 pb-12 border-b border-white/10">
           
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
@@ -41,22 +46,27 @@ export const Footer: React.FC<FooterProps> = ({ settings, onOpenAdmin, onOpenOrd
               <span>NAFDAC REG. NO.: {settings.nafdacReg}</span>
             </div>
 
-            {/* Dynamic Social Icons */}
+            {/* Dynamic Social Icons in Brand Column */}
             {activeSocialLinks.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2.5 pt-3">
-                {activeSocialLinks.map((s) => (
-                  <a
-                    key={s.id}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={s.name}
-                    title={s.name}
-                    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-[#146B4A] hover:text-white text-slate-300 flex items-center justify-center transition-all duration-150 hover:scale-105"
-                  >
-                    <SocialIcon platform={s.platform} className="w-4 h-4" />
-                  </a>
-                ))}
+              <div className="pt-3 space-y-2">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                  Follow Our Social Channels:
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {activeSocialLinks.map((s) => (
+                    <a
+                      key={s.id}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={s.name}
+                      title={`${s.name} (${s.url})`}
+                      className="w-9 h-9 rounded-xl bg-white/10 hover:bg-[#146B4A] hover:text-white text-slate-200 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-xs border border-white/10"
+                    >
+                      <SocialIcon platform={s.platform} className="w-4 h-4" />
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -172,6 +182,38 @@ export const Footer: React.FC<FooterProps> = ({ settings, onOpenAdmin, onOpenOrd
           </div>
 
         </div>
+
+        {/* Full-width Social Media Ribbon */}
+        {activeSocialLinks.length > 0 && (
+          <div className="py-8 border-b border-white/10 flex flex-col md:flex-row items-center justify-between gap-5">
+            <div className="text-center md:text-left">
+              <h4 className="text-sm font-bold text-white flex items-center justify-center md:justify-start gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#9EE114] animate-pulse" />
+                <span>Join Lomstel Agro Community</span>
+              </h4>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Stay updated on daily fresh harvests, special wholesale dispatch routes, and mushroom wellness tips.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              {activeSocialLinks.map((s) => (
+                <a
+                  key={`ribbon-${s.id}`}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-[#146B4A] border border-white/10 hover:border-[#9EE114]/40 text-xs font-semibold text-slate-200 hover:text-white transition-all duration-200 hover:scale-105 shadow-xs group"
+                  title={`${s.name} - ${s.url}`}
+                >
+                  <SocialIcon platform={s.platform} className="w-4 h-4 text-[#9EE114] group-hover:text-white transition-colors" />
+                  <span>{s.name}</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-white opacity-60" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Sub-Footer Copyright & Regulatory Notes */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">

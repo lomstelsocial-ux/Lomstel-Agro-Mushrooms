@@ -287,7 +287,6 @@ function mapSiteSettingsToDb(settings: SiteSettings): Record<string, any> {
     hero_subheadline: settings.heroSubheadline,
     hero_image: settings.heroImage,
     hero_dried_image: settings.heroDriedImage,
-    hero_cta_text: settings.heroCtaText,
     about_title: settings.aboutTitle,
     about_text: settings.aboutText,
     about_image: settings.aboutImage,
